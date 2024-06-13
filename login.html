@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login</title>
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f8f9fa;
+    }
+    .login-form {
+      width: 100%;
+      max-width: 400px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      background-color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-form">
+    <h1 class="h3 mb-3 font-weight-normal text-center">Please sign in</h1>
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" class="form-control" placeholder="Username" required autofocus />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" class="form-control" placeholder="Password" required />
+      </div>
+      <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
+      <p id="error-message" class="text-danger mt-3" style="display: none;">Invalid credentials</p>
+    </form>
+  </div>
+
+  <!-- Include jQuery and Bootstrap JS -->
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <script>
+    let db;
+    const request = indexedDB.open("UserDatabase", 1);
+
+    request.onupgradeneeded = function(event) {
+      db = event.target.result;
+      const objectStore = db.createObjectStore("users", { keyPath: "userID", autoIncrement: true });
+      objectStore.createIndex("username", "username", { unique: true });
+    };
+
+    request.onsuccess = function(event) {
+      db = event.target.result;
+    };
+
+    request.onerror = function(event) {
+      console.error("Database error: " + event.target.errorCode);
+    };
+
+    document.getElementById("loginForm").addEventListener("submit", function(event) {
+      event.preventDefault();
+
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+
+      const transaction = db.transaction(["users"], "readonly");
+      const objectStore = transaction.objectStore("users");
+      const index = objectStore.index("username");
+      const request = index.get(username);
+
+      request.onsuccess = function(event) {
+        const user = event.target.result;
+        if (user && user.password === password) {
+          localStorage.setItem("userLoggedIn", "true");
+          if (user.isAdmin) {
+            window.location.href = "admin.html";
+          } else {
+            window.location.href = "index.html";
+          }
+        } else {
+          document.getElementById("error-message").style.display = "block";
+        }
+      };
+
+      request.onerror = function(event) {
+        document.getElementById("error-message").style.display = "block";
+      };
+    });
+  </script>
+</body>
+</html>

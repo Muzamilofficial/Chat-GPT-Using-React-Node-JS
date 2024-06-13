@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin - User Management</title>
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body {
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="mb-4">Muzamil Khan GPT Admin Panel</h1>
+    <form id="userForm" class="mb-4">
+      <div class="form-row">
+        <div class="form-group col-md-4">
+          <label for="username">Username</label>
+          <input type="text" class="form-control" id="username" placeholder="Username" required />
+        </div>
+        <div class="form-group col-md-4">
+          <label for="password">Password</label>
+          <input type="password" class="form-control" id="password" placeholder="Password" required />
+        </div>
+        <div class="form-group col-md-4">
+          <label for="isAdmin">Admin</label>
+          <input type="checkbox" class="form-control" id="isAdmin" />
+        </div>
+      </div>
+      <button type="button" class="btn btn-success mr-2" id="addUserButton">Add User</button>
+      <button type="button" class="btn btn-danger" id="logoutButton">Logout</button>
+    </form>
+
+    <div id="messageBox" class="alert alert-success" role="alert" style="display: none;">
+      User added successfully!
+    </div>
+
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">User ID</th>
+          <th scope="col">Username</th>
+          <th scope="col">Password</th>
+          <th scope="col">Role</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="userTableBody">
+        <!-- Users will be populated here -->
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    let db;
+    const request = indexedDB.open("UserDatabase", 1);
+
+    request.onupgradeneeded = function(event) {
+      db = event.target.result;
+      const objectStore = db.createObjectStore("users", { keyPath: "userID", autoIncrement: true });
+      objectStore.createIndex("username", "username", { unique: true });
+    };
+
+    request.onsuccess = function(event) {
+      db = event.target.result;
+      refreshUserTable();
+    };
+
+    request.onerror = function(event) {
+      console.error("Database error: " + event.target.errorCode);
+    };
+
+    function refreshUserTable() {
+      const transaction = db.transaction(["users"], "readonly");
+      const objectStore = transaction.objectStore("users");
+      const request = objectStore.getAll();
+
+      request.onsuccess = function(event) {
+        const users = event.target.result;
+        const tableBody = document.getElementById("userTableBody");
+        tableBody.innerHTML = "";
+
+        users.forEach((user, index) => {
+          const role = user.isAdmin ? 'Admin' : 'User';
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${user.userID}</td>
+            <td>${user.username}</td>
+            <td>${user.password}</td>
+            <td>${role}</td>
+            <td>
+              <button class="btn btn-primary btn-sm updateButton" data-userid="${user.userID}">Update</button>
+              <button class="btn btn-danger btn-sm deleteButton" data-userid="${user.userID}">Delete</button>
+            </td>`;
+          tableBody.appendChild(row);
+        });
+
+        document.querySelectorAll(".updateButton").forEach(button => {
+          button.addEventListener("click", function() {
+            const userId = parseInt(this.getAttribute("data-userid"));
+            const user = users.find(u => u.userID === userId);
+            document.getElementById("username").value = user.username;
+            document.getElementById("password").value = user.password;
+            document.getElementById("isAdmin").checked = user.isAdmin;
+            document.getElementById("addUserButton").textContent = "Update User";
+            document.getElementById("addUserButton").setAttribute("data-update", "true");
+            document.getElementById("addUserButton").setAttribute("data-userid", userId);
+          });
+        });
+
+        document.querySelectorAll(".deleteButton").forEach(button => {
+          button.addEventListener("click", function() {
+            const userId = parseInt(this.getAttribute("data-userid"));
+            if (confirm(`Are you sure you want to delete user ID: ${userId}?`)) {
+              const transaction = db.transaction(["users"], "readwrite");
+              const objectStore = transaction.objectStore("users");
+              objectStore.delete(userId);
+
+              transaction.oncomplete = function() {
+                refreshUserTable();
+              };
+            }
+          });
+        });
+      };
+    }
+
+    document.getElementById("addUserButton").addEventListener("click", function () {
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      const isAdmin = document.getElementById("isAdmin").checked;
+
+      if (username.trim() !== "" && password.trim() !== "") {
+        const updateMode = this.getAttribute("data-update") === "true";
+        if (updateMode) {
+          const userId = parseInt(this.getAttribute("data-userid"));
+          const transaction = db.transaction(["users"], "readwrite");
+          const objectStore = transaction.objectStore("users");
+          const request = objectStore.get(userId);
+
+          request.onsuccess = function(event) {
+            const user = event.target.result;
+            user.username = username;
+            user.password = password;
+            user.isAdmin = isAdmin;
+            objectStore.put(user);
+
+            transaction.oncomplete = function() {
+              document.getElementById("addUserButton").textContent = "Add User";
+              document.getElementById("addUserButton").removeAttribute("data-update");
+              document.getElementById("addUserButton").removeAttribute("data-userid");
+              refreshUserTable();
+              document.getElementById("userForm").reset();
+            };
+          };
+        } else {
+          const transaction = db.transaction(["users"], "readwrite");
+          const objectStore = transaction.objectStore("users");
+          const userExistsRequest = objectStore.index("username").get(username);
+
+          userExistsRequest.onsuccess = function(event) {
+            if (!event.target.result) {
+              const newUser = { username, password, isAdmin };
+              objectStore.add(newUser);
+
+              transaction.oncomplete = function() {
+                const messageBox = document.getElementById("messageBox");
+                messageBox.style.display = 'block';
+                setTimeout(() => {
+                  messageBox.style.display = 'none';
+                }, 3000); // Hide after 3 seconds
+                refreshUserTable();
+                document.getElementById("userForm").reset();
+              };
+            } else {
+              alert("Username already exists.");
+            }
+          };
+        }
+      } else {
+        alert("Username and password cannot be empty.");
+      }
+    });
+
+    // Logout functionality
+    document.getElementById("logoutButton").addEventListener("click", function() {
+      localStorage.removeItem("userLoggedIn");
+      window.location.href = "/login.html"; // Redirect to login page
+      location.reload(true); // Force reload to prevent cached page from loading
+    });
+
+    // Check if the user is logged in on page load
+    document.addEventListener("DOMContentLoaded", function() {
+      if (!isLoggedIn()) {
+        redirectToLogin();
+      }
+
+      // Check if user navigates back to admin page
+      window.addEventListener("popstate", function() {
+        if (window.location.pathname === "/admin.html") {
+          redirectToLogin();
+        }
+      });
+    });
+
+    function isLoggedIn() {
+      return localStorage.getItem("userLoggedIn") === "true";
+    }
+
+    function redirectToLogin() {
+      localStorage.removeItem("userLoggedIn");
+      window.location.href = "/login.html";
+    }
+  </script>
+</body>
+</html>
